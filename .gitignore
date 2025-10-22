@@ -1,0 +1,9 @@
+# Entornos y claves
+server/.venv/
+.env
+*.pem
+
+# Archivos temporales
+__pycache__/
+*.pyc
+.DS_Store

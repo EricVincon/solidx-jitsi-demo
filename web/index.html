@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOLIDX - Videollamada</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://8x8.vc/external_api.js"></script>
+</head>
+<body>
+  <header>
+    <img src="logo_universidad.png" alt="Logo Universidad" class="logo" />
+    <div class="header-center">
+      <h1>SOLIDX</h1>
+      <p>"La inclusión no es llevar las personas a lo que ya existe; es crear nuevos y mejores espacios para todos"</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="join-container">
+      <div class="row">
+        <input id="nombre" type="text" placeholder="Tu nombre" />
+        <input id="sala" type="text" placeholder="Nombre de la sala" />
+      </div>
+
+      <div class="role-card">
+        <div class="role-title">¿Cuál es tu rol para esta reunión?</div>
+        <label class="role-option">
+          <input type="radio" name="rol" id="rolOyente" value="oyente" checked />
+          <span>Soy oyente</span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="rol" id="rolNoOyente" value="no_oyente" />
+          <span>No oyente (activar traductor)</span>
+        </label>
+      </div>
+
+      <button id="btnEntrar">Entrar</button>
+    </div>
+
+    <div id="meet" class="meet"></div>
+  </main>
+
+  <footer>
+    <p>© 2025 SOLIDX — Videollamadas con IA</p>
+  </footer>
+
+  <script>
+    const APP_ID = "vpaas-magic-cookie-47b629c2cf8a4db3a9373961402974c0";
+    const domain = "8x8.vc";
+
+    // 1) Si la URL ya viene como /APP_ID/salaX, prefijamos el input con esa sala
+    (function prefillFromPath() {
+      const parts = window.location.pathname.replace(/^\/+/, "").split("/");
+      if (parts.length >= 2 && parts[0] === APP_ID) {
+        const salaPath = decodeURIComponent(parts.slice(1).join("/"));
+        document.getElementById("sala").value = salaPath;
+      }
+    })();
+
+    document.getElementById("btnEntrar").addEventListener("click", async () => {
+      const nombre = document.getElementById("nombre").value.trim() || "Invitado";
+      const salaInput = document.getElementById("sala").value.trim() || "demo";
+      const roomName = `${APP_ID}/${salaInput}`;
+
+      // 2) Antes de crear la reunión, ponemos la URL del navegador en /APP_ID/sala
+      //    para que el botón de invitar de Jitsi copie esta URL (y funcione al abrirla).
+      const newPath = `/${APP_ID}/${encodeURIComponent(salaInput)}`;
+      if (window.location.pathname !== newPath) {
+        history.replaceState(null, "", newPath);
+      }
+
+      try {
+        const res = await fetch(`/api/token?room=${encodeURIComponent(salaInput)}&name=${encodeURIComponent(nombre)}&moderator=true`);
+        const data = await res.json();
+
+        if (!data.token) {
+          alert("No se pudo obtener el token del servidor.");
+          return;
+        }
+
+        const options = {
+          roomName,
+          jwt: data.token,
+          parentNode: document.getElementById("meet"),
+          configOverwrite: {
+            prejoinPageEnabled: true,
+            defaultLanguage: "es",
+            disableSimulcast: true,
+            constraints: { video: { height: { ideal: 480 }, width: { ideal: 720 } } }
+          },
+          interfaceConfigOverwrite: {
+            SHOW_JITSI_WATERMARK: false,
+            SHOW_CHROME_EXTENSION_BANNER: false,
+            DEFAULT_BACKGROUND: "#f0f0f0"
+          },
+          userInfo: { displayName: nombre }
+        };
+
+        const api = new JitsiMeetExternalAPI(domain, options);
+        api.executeCommand("subject", "Videollamada SOLIDX");
+
+        // (tu lógica de traductor, botones, etc. puede ir aquí si la necesitas)
+      } catch (err) {
+        console.error("Error al conectar con el servidor:", err);
+        alert("Error al conectar con el servidor. Revisa la consola.");
+      }
+    });
+  </script>
+</body>
+</html>

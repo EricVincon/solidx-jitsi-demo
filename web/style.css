@@ -1,0 +1,143 @@
+body {
+  margin: 0;
+  font-family: "Poppins", sans-serif;
+  background: linear-gradient(180deg, #fdfdfd 0%, #e8ecf1 100%);
+  color: #222;
+  text-align: center;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ======= HEADER ======= */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: #005eff;
+  color: white;
+  padding: 12px 14px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.logo {
+  position: absolute;
+  left: 30px;
+  height: 65px;
+  width: auto;
+}
+
+.header-center {
+  text-align: center;
+}
+
+.header-center h1 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.header-center p {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+  opacity: 0.95;
+}
+
+/* ======= MAIN ======= */
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.join-container {
+  margin-bottom: 20px;
+  background: #ffffffcc;
+  border: 1px solid #d9dfe6;
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  max-width: 720px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.join-container input {
+  padding: 10px;
+  margin: 5px 0;
+  border: 1px solid #aaa;
+  border-radius: 5px;
+  width: 220px;
+}
+
+/* ======= BLOQUE DE ROL ======= */
+.role-card {
+  margin: 14px auto;
+  padding: 14px 12px;
+  border: 1px solid #d9dfe6;
+  border-radius: 10px;
+  background: #f8fafc;
+  max-width: 540px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.role-title {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 6px;
+  color: #223;
+}
+
+.role-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+/* ======= BOTÓN ENTRAR ======= */
+.join-container button {
+  background: #005eff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.join-container button:hover {
+  background: #0040b0;
+}
+
+/* ======= RECUADRO DE JITSI ======= */
+.meet {
+  width: 80%;
+  height: 70vh;
+  margin: 0 auto;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  background: #000;
+}
+
+/* ======= FOOTER ======= */
+footer {
+  background: #f5f5f5;
+  padding: 10px;
+  font-size: 0.9rem;
+  color: #555;
+}
