@@ -1,62 +1,64 @@
-import os, base64, re
+import os, re, base64
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from jose import jwt
-from dotenv import load_dotenv
 
-# === Cargar .env (local). En Render, vienen de Environment Variables ===
-load_dotenv()
+def _env(name: str) -> str | None:
+    v = os.getenv(name)
+    if v is None:
+        return None
+    return v.strip().strip('"').strip("'").replace("\r", "")
 
-APP_ID = os.getenv("APP_ID")  # p.ej. vpaas-magic-cookie-xxxx
-KEY_ID = os.getenv("KEY_ID")  # p.ej. vpaas-magic-cookie-xxxx/123456
-PRIVATE_KEY_PATH = os.getenv("PRIVATE_KEY_PATH", "private_key.pem")
+# --- Lee env ---
+APP_ID = _env("APP_ID")  # ej: vpaas-magic-cookie-xxxx
+KEY_ID = _env("KEY_ID")  # ej: vpaas-magic-cookie-xxxx/123456
+PRIVATE_KEY_PEM = _env("PRIVATE_KEY_PEM")
+PRIVATE_KEY_PEM_B64 = _env("PRIVATE_KEY_PEM_BASE64")
 
-assert APP_ID, "Falta APP_ID en .env / Environment"
-assert KEY_ID, "Falta KEY_ID en .env / Environment"
-assert KEY_ID.startswith(APP_ID + "/"), "KEY_ID debe tener formato APP_ID/NUM_ID"
+# Normaliza KEY_ID
+if KEY_ID:
+    if KEY_ID.lower().startswith("kid="):
+        KEY_ID = KEY_ID.split("=", 1)[1].strip()
+    KEY_ID = re.sub(r"\s+", "", KEY_ID)
 
-def _try_load_private_key() -> bytes:
-    """
-    Intenta, en este orden:
-    1) PRIVATE_KEY_PEM (PEM crudo, multilinea)
-    2) PRIVATE_KEY_PEM_BASE64 (Base64 de todo el PEM, con o sin saltos)
-    3) Archivo local PRIVATE_KEY_PATH (para dev local)
-    """
-    # 1) PEM crudo (multilinea)
-    pem_raw = os.getenv("PRIVATE_KEY_PEM")
-    if pem_raw and "BEGIN PRIVATE KEY" in pem_raw:
-        return pem_raw.encode("utf-8")
+# Si APP_ID falta o no matchea, lo derivamos desde KEY_ID
+derived_app_id = None
+if KEY_ID and "/" in KEY_ID:
+    derived_app_id = KEY_ID.split("/", 1)[0]
 
-    # 2) Base64 del PEM
-    b64_val = os.getenv("PRIVATE_KEY_PEM_BASE64")
-    if b64_val:
-        # Normalizar: quitar espacios/blancos y saltos
-        compact = re.sub(r"\s+", "", b64_val)
-        # Arreglar padding si falta (múltiplo de 4)
-        missing = len(compact) % 4
-        if missing:
-            compact += "=" * (4 - missing)
-        try:
-            return base64.b64decode(compact, validate=False)
-        except Exception as e:
-            raise RuntimeError(f"PRIVATE_KEY_PEM_BASE64 inválido: {e}")
+auto_fix_msgs = []
+if (not APP_ID) and derived_app_id:
+    APP_ID = derived_app_id
+    auto_fix_msgs.append("APP_ID derivado automáticamente desde KEY_ID.")
+elif APP_ID and derived_app_id and (not KEY_ID.startswith(APP_ID + "/")):
+    APP_ID = derived_app_id  # preferimos la parte izquierda del KEY_ID
+    auto_fix_msgs.append("APP_ID no coincidía; se reemplazó por la parte izquierda de KEY_ID.")
 
-    # 3) Archivo local (dev)
-    priv_path = Path(__file__).with_name(PRIVATE_KEY_PATH)
-    if priv_path.exists():
-        return priv_path.read_bytes()
+errors = []
+if not APP_ID:
+    errors.append("Falta APP_ID.")
+if not KEY_ID:
+    errors.append("Falta KEY_ID.")
 
-    raise RuntimeError("No se encontró ninguna clave: defina PRIVATE_KEY_PEM o PRIVATE_KEY_PEM_BASE64 o el archivo local.")
+# Carga clave privada
+PRIVATE_KEY_BYTES = None
+if PRIVATE_KEY_PEM and PRIVATE_KEY_PEM_B64:
+    errors.append("Define SOLO una de PRIVATE_KEY_PEM o PRIVATE_KEY_PEM_BASE64, no ambas.")
+elif PRIVATE_KEY_PEM:
+    PRIVATE_KEY_BYTES = PRIVATE_KEY_PEM.encode("utf-8")
+elif PRIVATE_KEY_PEM_B64:
+    try:
+        PRIVATE_KEY_BYTES = base64.b64decode(PRIVATE_KEY_PEM_B64, validate=False)
+    except Exception as e:
+        errors.append(f"PRIVATE_KEY_PEM_BASE64 invalida: {e}")
+else:
+    errors.append("No encontré PRIVATE_KEY_PEM ni PRIVATE_KEY_PEM_BASE64.")
 
-PRIVATE_KEY_PEM = _try_load_private_key()
-
-# === App Flask ===
+# Flask
 app = Flask(__name__, static_folder=None)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
-
-# Carpeta web (../web relativo a este archivo)
 WEB_DIR = (Path(__file__).resolve().parents[1] / "web").resolve()
 
 @app.route("/")
@@ -75,29 +77,30 @@ def ping():
 def debug_env():
     return jsonify({
         "APP_ID_present": bool(APP_ID),
-        "KEY_ID_startswith_APP_ID": bool(KEY_ID and KEY_ID.startswith(APP_ID + "/")),
-        "has_PRIVATE_KEY_PEM_BASE64": bool(os.getenv("PRIVATE_KEY_PEM_BASE64")),
-        "has_PRIVATE_KEY_PEM": bool(os.getenv("PRIVATE_KEY_PEM")),
-        "using_file_key": not (os.getenv("PRIVATE_KEY_PEM_BASE64") or os.getenv("PRIVATE_KEY_PEM")),
+        "KEY_ID_present": bool(KEY_ID),
+        "KEY_ID_startswith_APP_ID": (bool(APP_ID) and bool(KEY_ID) and KEY_ID.startswith(APP_ID + "/")),
+        "has_PRIVATE_KEY_PEM": bool(PRIVATE_KEY_PEM),
+        "has_PRIVATE_KEY_PEM_BASE64": bool(PRIVATE_KEY_PEM_B64),
+        "using_base64_key": bool(PRIVATE_KEY_PEM_B64),
+        "auto_fix_msgs": auto_fix_msgs,
+        "errors": errors,
+        "APP_ID_preview": (APP_ID[:18] + "..." if APP_ID else None),
+        "KEY_ID_preview": (KEY_ID[:18] + "..." if KEY_ID else None),
     })
 
 def build_jaas_token(room: str, name: str, email: str | None, moderator: bool) -> str:
+    if errors:
+        raise RuntimeError("Config inválida: " + " | ".join(errors))
     now = datetime.now(timezone.utc)
-    nbf = int(now.timestamp())
-    exp = int((now + timedelta(minutes=60)).timestamp())
-
     payload = {
         "aud": "jitsi",
         "iss": "chat",
-        "sub": APP_ID,      # AppID
-        "room": room,       # "*" o nombre corto de sala (sin APP_ID)
-        "nbf": nbf,
-        "exp": exp,
+        "sub": APP_ID,          # AppID correcto (auto-derivado si hacía falta)
+        "room": room,           # nombre simple, sin AppID
+        "nbf": int(now.timestamp()),
+        "exp": int((now + timedelta(hours=1)).timestamp()),
         "context": {
-            "user": {
-                "name": name or "Invitado",
-                "email": email,
-            },
+            "user": { "name": name or "Invitado", "email": email },
             "features": {
                 "recording": False,
                 "livestreaming": False,
@@ -106,16 +109,8 @@ def build_jaas_token(room: str, name: str, email: str | None, moderator: bool) -
         },
         "moderator": bool(moderator),
     }
-
-    headers = { "kid": KEY_ID }  # APP_ID/KEY_NUMBER
-
-    token = jwt.encode(
-        claims=payload,
-        key=PRIVATE_KEY_PEM,
-        algorithm="RS256",
-        headers=headers
-    )
-    return token
+    headers = { "kid": KEY_ID }  # Debe ser APP_ID/NUM_ID
+    return jwt.encode(payload, PRIVATE_KEY_BYTES, algorithm="RS256", headers=headers)
 
 @app.get("/api/token")
 def api_token():
@@ -123,8 +118,11 @@ def api_token():
     name = request.args.get("name", "Invitado")
     email = request.args.get("email")
     moderator = request.args.get("moderator", "false").lower() in ("1", "true", "yes")
-    token = build_jaas_token(room=room, name=name, email=email, moderator=moderator)
-    return jsonify({"token": token})
+    try:
+        token = build_jaas_token(room=room, name=name, email=email, moderator=moderator)
+        return jsonify({"token": token})
+    except Exception as e:
+        return jsonify({"error": str(e), "hint": "/api/debug-env"}), 500
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
