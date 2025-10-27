@@ -35,7 +35,10 @@
         </label>
       </div>
 
-      <button id="btnEntrar">Entrar</button>
+      <div class="actions">
+        <button id="btnEntrar">Entrar</button>
+        <button id="btnInvitar" class="secondary">Invitar</button>
+      </div>
     </div>
 
     <div id="meet" class="meet"></div>
@@ -49,26 +52,35 @@
     const APP_ID = "vpaas-magic-cookie-47b629c2cf8a4db3a9373961402974c0";
     const domain = "8x8.vc";
 
-    // 1) Si la URL ya viene como /APP_ID/salaX, prefijamos el input con esa sala
-    (function prefillFromPath() {
-      const parts = window.location.pathname.replace(/^\/+/, "").split("/");
-      if (parts.length >= 2 && parts[0] === APP_ID) {
-        const salaPath = decodeURIComponent(parts.slice(1).join("/"));
-        document.getElementById("sala").value = salaPath;
+    // Lee ?room= de la URL y autocompleta
+    const params = new URLSearchParams(window.location.search);
+    const roomFromUrl = params.get("room");
+    if (roomFromUrl) {
+      document.getElementById("sala").value = roomFromUrl;
+    }
+
+    document.getElementById("btnInvitar").addEventListener("click", async () => {
+      const salaInput = document.getElementById("sala").value.trim() || "demo";
+      const origin = window.location.origin;
+      // Link de invitación válido: /join/<room>
+      const inviteUrl = `${origin}/join/${encodeURIComponent(salaInput)}`;
+
+      try {
+        await navigator.clipboard.writeText(inviteUrl);
+        alert("Link de invitación copiado:\n" + inviteUrl);
+      } catch {
+        // Fallback
+        prompt("Copia el enlace y compártelo:", inviteUrl);
       }
-    })();
+    });
 
     document.getElementById("btnEntrar").addEventListener("click", async () => {
       const nombre = document.getElementById("nombre").value.trim() || "Invitado";
       const salaInput = document.getElementById("sala").value.trim() || "demo";
       const roomName = `${APP_ID}/${salaInput}`;
 
-      // 2) Antes de crear la reunión, ponemos la URL del navegador en /APP_ID/sala
-      //    para que el botón de invitar de Jitsi copie esta URL (y funcione al abrirla).
-      const newPath = `/${APP_ID}/${encodeURIComponent(salaInput)}`;
-      if (window.location.pathname !== newPath) {
-        history.replaceState(null, "", newPath);
-      }
+      const esNoOyente = document.getElementById("rolNoOyente").checked;
+      const traductorInicialActivo = esNoOyente;
 
       try {
         const res = await fetch(`/api/token?room=${encodeURIComponent(salaInput)}&name=${encodeURIComponent(nombre)}&moderator=true`);
@@ -87,7 +99,7 @@
             prejoinPageEnabled: true,
             defaultLanguage: "es",
             disableSimulcast: true,
-            constraints: { video: { height: { ideal: 480 }, width: { ideal: 720 } } }
+            constraints: { video: { height: { ideal: 480 }, width: { ideal: 720 } } },
           },
           interfaceConfigOverwrite: {
             SHOW_JITSI_WATERMARK: false,
@@ -100,7 +112,9 @@
         const api = new JitsiMeetExternalAPI(domain, options);
         api.executeCommand("subject", "Videollamada SOLIDX");
 
-        
+        // (si en el futuro vuelves a integrar tu botón de traductor, aquí es donde lo habilitas)
+        // if (traductorInicialActivo) { ... }
+
       } catch (err) {
         console.error("Error al conectar con el servidor:", err);
         alert("Error al conectar con el servidor. Revisa la consola.");

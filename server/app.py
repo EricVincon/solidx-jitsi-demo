@@ -1,7 +1,8 @@
 import os, re, base64
+from urllib.parse import quote
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, redirect
 from flask_cors import CORS
 from jose import jwt
 
@@ -12,8 +13,8 @@ def _env(name: str) -> str | None:
     return v.strip().strip('"').strip("'").replace("\r", "")
 
 # --- Lee env ---
-APP_ID = _env("APP_ID")  
-KEY_ID = _env("KEY_ID")  
+APP_ID = _env("APP_ID")  # ej: vpaas-magic-cookie-xxxx
+KEY_ID = _env("KEY_ID")  # ej: vpaas-magic-cookie-xxxx/123456
 PRIVATE_KEY_PEM = _env("PRIVATE_KEY_PEM")
 PRIVATE_KEY_PEM_B64 = _env("PRIVATE_KEY_PEM_BASE64")
 
@@ -23,7 +24,7 @@ if KEY_ID:
         KEY_ID = KEY_ID.split("=", 1)[1].strip()
     KEY_ID = re.sub(r"\s+", "", KEY_ID)
 
-# Si APP_ID falta o no matchea, lo derivamos desde KEY_ID
+# Si APP_ID falta o no matchea, derivarlo desde KEY_ID
 derived_app_id = None
 if KEY_ID and "/" in KEY_ID:
     derived_app_id = KEY_ID.split("/", 1)[0]
@@ -33,7 +34,7 @@ if (not APP_ID) and derived_app_id:
     APP_ID = derived_app_id
     auto_fix_msgs.append("APP_ID derivado automáticamente desde KEY_ID.")
 elif APP_ID and derived_app_id and (not KEY_ID.startswith(APP_ID + "/")):
-    APP_ID = derived_app_id  # preferimos la parte izquierda del KEY_ID
+    APP_ID = derived_app_id
     auto_fix_msgs.append("APP_ID no coincidía; se reemplazó por la parte izquierda de KEY_ID.")
 
 errors = []
@@ -69,6 +70,11 @@ def index():
 def web_files(filename):
     return send_from_directory(WEB_DIR, filename)
 
+# Ruta corta para invitaciones: /join/<room> -> /?room=<room>
+@app.get("/join/<room>")
+def join_room(room):
+    return redirect(f"/?room={quote(room)}", code=302)
+
 @app.get("/ping")
 def ping():
     return "pong"
@@ -95,8 +101,8 @@ def build_jaas_token(room: str, name: str, email: str | None, moderator: bool) -
     payload = {
         "aud": "jitsi",
         "iss": "chat",
-        "sub": APP_ID,          # AppID correcto (auto-derivado si hacía falta)
-        "room": room,           # nombre simple, sin AppID
+        "sub": APP_ID,
+        "room": room,  # nombre simple (sin APP_ID)
         "nbf": int(now.timestamp()),
         "exp": int((now + timedelta(hours=1)).timestamp()),
         "context": {
