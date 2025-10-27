@@ -12,8 +12,8 @@ def _env(name: str) -> str | None:
     return v.strip().strip('"').strip("'").replace("\r", "")
 
 # --- Lee env ---
-APP_ID = _env("APP_ID")  # ej: vpaas-magic-cookie-xxxx
-KEY_ID = _env("KEY_ID")  # ej: vpaas-magic-cookie-xxxx/123456
+APP_ID = _env("APP_ID")  
+KEY_ID = _env("KEY_ID")  
 PRIVATE_KEY_PEM = _env("PRIVATE_KEY_PEM")
 PRIVATE_KEY_PEM_B64 = _env("PRIVATE_KEY_PEM_BASE64")
 
