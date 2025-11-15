@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
@@ -18,12 +18,14 @@
   <style>
     .meet-wrapper {
       position: relative;
-      width: 80%;
-      height: 80%;
+      width: 100%;
+      height: 100%;
     }
 
-    /* El .meet ya lo manejás en style.css, esto es por las dudas */
-    
+    .meet {
+      width: 100%;
+      height: 100%;
+    }
 
     .access-overlay {
       position: absolute;
@@ -35,8 +37,8 @@
 
     .access-overlay video,
     .access-overlay canvas {
-      width: 80%;
-      height: 80%;
+      width: 100%;
+      height: 100%;
       object-fit: cover;
       display: block;
     }
@@ -171,19 +173,13 @@
           return;
         }
 
-        // Config base para Jitsi
+        // Config base para Jitsi: lobby / prejoin como antes
         const configOverwrite = {
           prejoinPageEnabled: true,
           defaultLanguage: "es",
           disableSimulcast: true,
           constraints: { video: { height: { ideal: 480 }, width: { ideal: 720 } } },
         };
-
-        // Si es NO oyente, que Jitsi NO prenda la cámara (así la usamos solo para MediaPipe)
-        if (traductorInicialActivo) {
-          configOverwrite.prejoinPageEnabled = false;
-          configOverwrite.startWithVideoMuted = true;
-        }
 
         const options = {
           roomName,
@@ -201,10 +197,14 @@
         const api = new JitsiMeetExternalAPI(domain, options);
         api.executeCommand("subject", "Videollamada SOLIDX");
 
-        // Si el usuario marcó "No oyente", activamos la vista accesible
-        if (traductorInicialActivo) {
-          startAccessibility();
-        }
+        // IMPORTANTE:
+        // Solo activamos el modo accesible DESPUÉS de que el usuario entra a la sala,
+        // para no romper ni el lobby ni la cámara en el prejoin.
+        api.addListener("videoConferenceJoined", () => {
+          if (traductorInicialActivo) {
+            startAccessibility();
+          }
+        });
 
         // Cuando la sala se cierra, apagamos cámara y MediaPipe
         api.addListener("readyToClose", () => {
@@ -232,7 +232,7 @@
           throw new Error("Este navegador no soporta getUserMedia");
         }
 
-        // Pedimos acceso a la cámara
+        // Pedimos acceso a la cámara (compartida con Jitsi)
         accessStream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480 }
         });
@@ -320,8 +320,10 @@
           if (results.rightHandLandmarks) {
             drawingUtils.drawLandmarks(ctx, results.rightHandLandmarks, landmarkStyle);
           }
-          
-          
+          // Vos ya sacaste la cara; la dejo desactivada:
+          // if (results.faceLandmarks) {
+          //   drawingUtils.drawLandmarks(ctx, results.faceLandmarks, landmarkStyle);
+          // }
         });
       }
 
