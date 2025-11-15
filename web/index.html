@@ -9,12 +9,12 @@
   <!-- Jitsi -->
   <script src="https://8x8.vc/external_api.js"></script>
 
-  <!-- MediaPipe: usar los nombres globales correctos (mpHolistic, drawingUtils, Camera) -->
+  <!-- MediaPipe: libs JS clásicas (globales) -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5/holistic.js" crossorigin="anonymous"></script>
 
-  <!-- Estilos mínimos para el panel accesible (por si tu CSS no lo cubre) -->
+  <!-- Estilos mínimos para el panel accesible -->
   <style>
     .access-panel {
       margin-top: 16px;
@@ -103,6 +103,11 @@
     const APP_ID = "vpaas-magic-cookie-47b629c2cf8a4db3a9373961402974c0";
     const domain = "8x8.vc";
 
+    // === Aliases para las globals de MediaPipe ===
+    const mpHolistic = window;   // Holistic, POSE_LANDMARKS, etc, cuelgan de window
+    const drawingUtils = window; // drawLandmarks, drawConnectors
+    // Camera viene global desde camera_utils.js
+
     // Referencias para la vista accesible
     const accessPanel = document.getElementById("accessibility-panel");
     const accessVideo = document.getElementById("accessibleVideo");
@@ -155,16 +160,25 @@
           return;
         }
 
+        // Config base para Jitsi
+        const configOverwrite = {
+          prejoinPageEnabled: true,
+          defaultLanguage: "es",
+          disableSimulcast: true,
+          constraints: { video: { height: { ideal: 480 }, width: { ideal: 720 } } },
+        };
+
+        // Si es NO oyente, que Jitsi NO prenda la cámara
+        if (traductorInicialActivo) {
+          configOverwrite.prejoinPageEnabled = false; // evita prejoin usando la cámara
+          configOverwrite.startWithVideoMuted = true; // entra al meet con cámara apagada
+        }
+
         const options = {
           roomName,
           jwt: data.token,
           parentNode: document.getElementById("meet"),
-          configOverwrite: {
-            prejoinPageEnabled: true,
-            defaultLanguage: "es",
-            disableSimulcast: true,
-            constraints: { video: { height: { ideal: 480 }, width: { ideal: 720 } } },
-          },
+          configOverwrite,
           interfaceConfigOverwrite: {
             SHOW_JITSI_WATERMARK: false,
             SHOW_CHROME_EXTENSION_BANNER: false,
@@ -207,7 +221,7 @@
           throw new Error("Este navegador no soporta getUserMedia");
         }
 
-        // Pedimos acceso a la cámara
+        // Pedimos acceso a la cámara (ya debería estar libre porque Jitsi no la usa en No oyente)
         accessStream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480 }
         });
@@ -254,7 +268,7 @@
     }
 
     function initHolistic(videoEl, canvasEl, ctx) {
-      // Creamos Holistic una sola vez, usando el nombre global correcto: mpHolistic
+      // Creamos Holistic una sola vez, usando el patrón oficial (mpHolistic = window)
       if (!holistic) {
         holistic = new mpHolistic.Holistic({
           locateFile: (file) =>
@@ -274,14 +288,14 @@
           // Limpiar
           ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 
-          // Dibujar el frame original (opcional)
+          // Dibujar el frame original
           if (results.image) {
             ctx.save();
             ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
             ctx.restore();
           }
 
-          // Dibujar SOLO puntos (landmarks) usando drawingUtils global
+          // Dibujar SOLO puntos (landmarks)
           if (results.poseLandmarks) {
             drawingUtils.drawLandmarks(ctx, results.poseLandmarks);
           }
@@ -297,7 +311,7 @@
         });
       }
 
-      // Camera viene de camera_utils.js y queda global como "Camera"
+      // Camera viene de camera_utils.js (global Camera)
       camera = new Camera(videoEl, {
         onFrame: async () => {
           await holistic.send({ image: videoEl });
