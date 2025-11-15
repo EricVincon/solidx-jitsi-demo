@@ -12,7 +12,7 @@ def _env(name: str) -> str | None:
         return None
     return v.strip().strip('"').strip("'").replace("\r", "")
 
-# --- Lee env ---
+
 APP_ID = _env("APP_ID")  # ej: vpaas-magic-cookie-xxxx
 KEY_ID = _env("KEY_ID")  # ej: vpaas-magic-cookie-xxxx/123456
 PRIVATE_KEY_PEM = _env("PRIVATE_KEY_PEM")
@@ -24,7 +24,7 @@ if KEY_ID:
         KEY_ID = KEY_ID.split("=", 1)[1].strip()
     KEY_ID = re.sub(r"\s+", "", KEY_ID)
 
-# Si APP_ID falta o no matchea, derivarlo desde KEY_ID
+
 derived_app_id = None
 if KEY_ID and "/" in KEY_ID:
     derived_app_id = KEY_ID.split("/", 1)[0]
@@ -43,7 +43,7 @@ if not APP_ID:
 if not KEY_ID:
     errors.append("Falta KEY_ID.")
 
-# Carga clave privada
+# Carga la clave privada
 PRIVATE_KEY_BYTES = None
 if PRIVATE_KEY_PEM and PRIVATE_KEY_PEM_B64:
     errors.append("Define SOLO una de PRIVATE_KEY_PEM o PRIVATE_KEY_PEM_BASE64, no ambas.")
@@ -102,7 +102,7 @@ def build_jaas_token(room: str, name: str, email: str | None, moderator: bool) -
         "aud": "jitsi",
         "iss": "chat",
         "sub": APP_ID,
-        "room": room,  # nombre simple (sin APP_ID)
+        "room": room, 
         "nbf": int(now.timestamp()),
         "exp": int((now + timedelta(hours=1)).timestamp()),
         "context": {
@@ -115,7 +115,7 @@ def build_jaas_token(room: str, name: str, email: str | None, moderator: bool) -
         },
         "moderator": bool(moderator),
     }
-    headers = { "kid": KEY_ID }  # Debe ser APP_ID/NUM_ID
+    headers = { "kid": KEY_ID }  
     return jwt.encode(payload, PRIVATE_KEY_BYTES, algorithm="RS256", headers=headers)
 
 @app.get("/api/token")

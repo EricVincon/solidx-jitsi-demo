@@ -6,6 +6,11 @@
   <title>SOLIDX - Videollamada</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://8x8.vc/external_api.js"></script>
+
+  <!-- NUEVO: MediaPipe Holistic + utilidades -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 </head>
 <body>
   <header>
@@ -42,6 +47,18 @@
     </div>
 
     <div id="meet" class="meet"></div>
+
+    <!-- NUEVO: panel de accesibilidad para mostrar puntos de MediaPipe -->
+    <section id="accessibility-panel" class="access-panel" style="display:none;">
+      <h2>Vista accesible (puntos clave)</h2>
+      <div class="access-video-wrapper">
+        <video id="accessibleVideo" autoplay playsinline muted></video>
+        <canvas id="overlayCanvas"></canvas>
+      </div>
+      <p class="access-note">
+        Esta vista solo se muestra en tu dispositivo. El resto de la llamada no ve estos puntos.
+      </p>
+    </section>
   </main>
 
   <footer>
@@ -51,6 +68,17 @@
   <script>
     const APP_ID = "vpaas-magic-cookie-47b629c2cf8a4db3a9373961402974c0";
     const domain = "8x8.vc";
+
+    // NUEVO: refs para accesibilidad
+    const accessPanel = document.getElementById("accessibility-panel");
+    const accessVideo = document.getElementById("accessibleVideo");
+    const overlayCanvas = document.getElementById("overlayCanvas");
+    const overlayCtx = overlayCanvas.getContext("2d");
+
+    let accessStream = null;
+    let holistic = null;
+    let camera = null;
+    let accessibilityEnabled = false;
 
     // Lee ?room= de la URL y autocompleta
     const params = new URLSearchParams(window.location.search);
@@ -112,14 +140,138 @@
         const api = new JitsiMeetExternalAPI(domain, options);
         api.executeCommand("subject", "Videollamada SOLIDX");
 
-        // (si en el futuro vuelves a integrar tu botón de traductor, aquí es donde lo habilitas)
-        // if (traductorInicialActivo) { ... }
+        // NUEVO: si el usuario marcó "No oyente", activamos el panel accesible
+        if (traductorInicialActivo) {
+          startAccessibility();
+        }
+
+        // NUEVO: cuando la sala se cierra, apagamos cámara y MediaPipe
+        api.addListener("readyToClose", () => {
+          stopAccessibility();
+        });
 
       } catch (err) {
         console.error("Error al conectar con el servidor:", err);
         alert("Error al conectar con el servidor. Revisa la consola.");
       }
     });
+
+    // =========================
+    //   ACCESIBILIDAD / MEDIAPIPE
+    // =========================
+
+    async function startAccessibility() {
+      if (accessibilityEnabled) return;
+      accessibilityEnabled = true;
+
+      accessPanel.style.display = "block";
+
+      try {
+        // Pedimos acceso a la cámara
+        accessStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        accessVideo.srcObject = accessStream;
+
+        accessVideo.onloadedmetadata = () => {
+          overlayCanvas.width = accessVideo.videoWidth;
+          overlayCanvas.height = accessVideo.videoHeight;
+        };
+
+        initHolistic(accessVideo, overlayCanvas, overlayCtx);
+      } catch (e) {
+        console.error("Error al iniciar accesibilidad:", e);
+        alert("No se pudo acceder a la cámara para la vista accesible.");
+        accessibilityEnabled = false;
+        accessPanel.style.display = "none";
+      }
+    }
+
+    function stopAccessibility() {
+      if (!accessibilityEnabled) return;
+      accessibilityEnabled = false;
+
+      accessPanel.style.display = "none";
+
+      // Cortar stream de cámara
+      if (accessStream) {
+        accessStream.getTracks().forEach(t => t.stop());
+        accessStream = null;
+      }
+
+      // Detener cámara virtual de MediaPipe
+      if (camera) {
+        camera.stop();
+        camera = null;
+      }
+
+      // Limpiar canvas
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    }
+
+    function initHolistic(videoEl, canvasEl, ctx) {
+      // Evita re-inicializar
+      if (holistic) {
+        // Reinicia la cámara asociada
+        camera = new Camera.Camera(videoEl, {
+          onFrame: async () => {
+            await holistic.send({ image: videoEl });
+          },
+          width: 640,
+          height: 480,
+        });
+        camera.start();
+        return;
+      }
+
+      holistic = new Holistic.Holistic({
+        locateFile: (file) =>
+          `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`,
+      });
+
+      holistic.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        refineFaceLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+
+      const { drawLandmarks } = window; // de drawing_utils
+
+      holistic.onResults((results) => {
+        // Limpiar
+        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+        // Dibujar el frame original opcionalmente
+        ctx.save();
+        ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
+        ctx.restore();
+
+        // Solo puntos (landmarks), sin conexiones
+        if (results.poseLandmarks) {
+          drawLandmarks(ctx, results.poseLandmarks);
+        }
+        if (results.leftHandLandmarks) {
+          drawLandmarks(ctx, results.leftHandLandmarks);
+        }
+        if (results.rightHandLandmarks) {
+          drawLandmarks(ctx, results.rightHandLandmarks);
+        }
+        if (results.faceLandmarks) {
+          drawLandmarks(ctx, results.faceLandmarks);
+        }
+      });
+
+      camera = new Camera.Camera(videoEl, {
+        onFrame: async () => {
+          await holistic.send({ image: videoEl });
+        },
+        width: 640,
+        height: 480,
+      });
+
+      camera.start();
+    }
   </script>
 </body>
 </html>
