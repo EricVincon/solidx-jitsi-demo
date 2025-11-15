@@ -126,6 +126,7 @@ button.secondary:hover {
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  position: relative; /* NUEVO: para poder posicionar el overlay adentro */
 }
 
 footer {
@@ -133,4 +134,41 @@ footer {
   padding: 10px;
   font-size: 0.9rem;
   color: #555;
+}
+
+/* ========= NUEVO: overlay de accesibilidad sobre el recuadro .meet ========= */
+
+.access-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;              /* se muestra solo para "no oyente" */
+  justify-content: center;
+  align-items: center;
+  z-index: 10;                /* por encima del iframe de Jitsi */
+  pointer-events: none;       /* no bloquea los clics de Jitsi */
+}
+
+.access-overlay video,
+.access-overlay canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.access-overlay canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.access-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 4px;
 }
