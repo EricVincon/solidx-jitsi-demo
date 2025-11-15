@@ -14,35 +14,53 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5/holistic.js" crossorigin="anonymous"></script>
 
-  <!-- Estilos mínimos para el panel accesible -->
+  <!-- Estilos mínimos solo para el overlay dentro del recuadro central -->
   <style>
-    .access-panel {
-      margin-top: 16px;
-      padding: 12px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      background: #fafafa;
-    }
-    .access-video-wrapper {
+    .meet-wrapper {
       position: relative;
-      max-width: 480px;
-    }
-    .access-video-wrapper video,
-    .access-video-wrapper canvas {
       width: 100%;
-      height: auto;
+      height: 100%;
+    }
+
+    /* El .meet ya lo manejás en style.css, esto es por las dudas */
+    .meet {
+      width: 100%;
+      height: 100%;
+    }
+
+    .access-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;            /* se activa solo para "no oyente" */
+      justify-content: center;
+      align-items: center;
+    }
+
+    .access-overlay video,
+    .access-overlay canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
       display: block;
     }
-    .access-video-wrapper canvas {
+
+    .access-overlay canvas {
       position: absolute;
       left: 0;
       top: 0;
-      pointer-events: none;
+      pointer-events: none;     /* para poder hacer click en los controles de Jitsi debajo */
     }
-    .access-note {
-      font-size: 0.85rem;
-      color: #555;
-      margin-top: 8px;
+
+    .access-label {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -80,19 +98,17 @@
       </div>
     </div>
 
-    <div id="meet" class="meet"></div>
+    <!-- RECUADRO CENTRAL COMO ANTES, PERO CON OVERLAY ENCIMA -->
+    <div class="meet-wrapper">
+      <div id="meet" class="meet"></div>
 
-    <!-- Panel accesible con cámara propia + puntos de MediaPipe -->
-    <section id="accessibility-panel" class="access-panel" style="display:none;">
-      <h2>Vista accesible (puntos clave)</h2>
-      <div class="access-video-wrapper">
+      <!-- Overlay de accesibilidad dentro del mismo recuadro -->
+      <div id="accessibility-overlay" class="access-overlay">
         <video id="accessibleVideo" autoplay playsinline muted></video>
         <canvas id="overlayCanvas"></canvas>
+        <div class="access-label">Modo accesible activo</div>
       </div>
-      <p class="access-note">
-        Esta vista solo se muestra en tu dispositivo. El resto de la llamada no ve estos puntos.
-      </p>
-    </section>
+    </div>
   </main>
 
   <footer>
@@ -103,13 +119,13 @@
     const APP_ID = "vpaas-magic-cookie-47b629c2cf8a4db3a9373961402974c0";
     const domain = "8x8.vc";
 
-    // === Aliases para las globals de MediaPipe ===
-    const mpHolistic = window;   // Holistic, POSE_LANDMARKS, etc, cuelgan de window
+    // Aliases para las globals de MediaPipe
+    const mpHolistic = window;   // Holistic y constantes cuelgan de window
     const drawingUtils = window; // drawLandmarks, drawConnectors
     // Camera viene global desde camera_utils.js
 
     // Referencias para la vista accesible
-    const accessPanel = document.getElementById("accessibility-panel");
+    const overlayContainer = document.getElementById("accessibility-overlay");
     const accessVideo = document.getElementById("accessibleVideo");
     const overlayCanvas = document.getElementById("overlayCanvas");
     const overlayCtx = overlayCanvas.getContext("2d");
@@ -130,14 +146,12 @@
     document.getElementById("btnInvitar").addEventListener("click", async () => {
       const salaInput = document.getElementById("sala").value.trim() || "demo";
       const origin = window.location.origin;
-      // Link de invitación válido: /join/<room>
       const inviteUrl = `${origin}/join/${encodeURIComponent(salaInput)}`;
 
       try {
         await navigator.clipboard.writeText(inviteUrl);
         alert("Link de invitación copiado:\n" + inviteUrl);
       } catch {
-        // Fallback
         prompt("Copia el enlace y compártelo:", inviteUrl);
       }
     });
@@ -168,10 +182,10 @@
           constraints: { video: { height: { ideal: 480 }, width: { ideal: 720 } } },
         };
 
-        // Si es NO oyente, que Jitsi NO prenda la cámara
+        // Si es NO oyente, que Jitsi NO prenda la cámara (así la usamos solo para MediaPipe)
         if (traductorInicialActivo) {
-          configOverwrite.prejoinPageEnabled = false; // evita prejoin usando la cámara
-          configOverwrite.startWithVideoMuted = true; // entra al meet con cámara apagada
+          configOverwrite.prejoinPageEnabled = false;
+          configOverwrite.startWithVideoMuted = true;
         }
 
         const options = {
@@ -214,14 +228,14 @@
       if (accessibilityEnabled) return;
       accessibilityEnabled = true;
 
-      accessPanel.style.display = "block";
+      overlayContainer.style.display = "flex";
 
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           throw new Error("Este navegador no soporta getUserMedia");
         }
 
-        // Pedimos acceso a la cámara (ya debería estar libre porque Jitsi no la usa en No oyente)
+        // Pedimos acceso a la cámara
         accessStream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480 }
         });
@@ -241,7 +255,7 @@
           "Detalle técnico: " + e.name + (e.message ? " - " + e.message : "")
         );
         accessibilityEnabled = false;
-        accessPanel.style.display = "none";
+        overlayContainer.style.display = "none";
       }
     }
 
@@ -249,7 +263,7 @@
       if (!accessibilityEnabled) return;
       accessibilityEnabled = false;
 
-      accessPanel.style.display = "none";
+      overlayContainer.style.display = "none";
 
       // Cortar stream de cámara
       if (accessStream) {
@@ -268,7 +282,7 @@
     }
 
     function initHolistic(videoEl, canvasEl, ctx) {
-      // Creamos Holistic una sola vez, usando el patrón oficial (mpHolistic = window)
+      // Creamos Holistic una sola vez
       if (!holistic) {
         holistic = new mpHolistic.Holistic({
           locateFile: (file) =>
@@ -285,7 +299,6 @@
         });
 
         holistic.onResults((results) => {
-          // Limpiar
           ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 
           // Dibujar el frame original
@@ -295,23 +308,28 @@
             ctx.restore();
           }
 
-          // Dibujar SOLO puntos (landmarks)
+          // Opciones para que los puntos NO sean negros: verde flúor, radio chico
+          const landmarkStyle = {
+            color: '#00ff00',
+            radius: 2
+          };
+
           if (results.poseLandmarks) {
-            drawingUtils.drawLandmarks(ctx, results.poseLandmarks);
+            drawingUtils.drawLandmarks(ctx, results.poseLandmarks, landmarkStyle);
           }
           if (results.leftHandLandmarks) {
-            drawingUtils.drawLandmarks(ctx, results.leftHandLandmarks);
+            drawingUtils.drawLandmarks(ctx, results.leftHandLandmarks, landmarkStyle);
           }
           if (results.rightHandLandmarks) {
-            drawingUtils.drawLandmarks(ctx, results.rightHandLandmarks);
+            drawingUtils.drawLandmarks(ctx, results.rightHandLandmarks, landmarkStyle);
           }
           if (results.faceLandmarks) {
-            drawingUtils.drawLandmarks(ctx, results.faceLandmarks);
+            drawingUtils.drawLandmarks(ctx, results.faceLandmarks, landmarkStyle);
           }
         });
       }
 
-      // Camera viene de camera_utils.js (global Camera)
+      // Camera viene de camera_utils.js
       camera = new Camera(videoEl, {
         onFrame: async () => {
           await holistic.send({ image: videoEl });
