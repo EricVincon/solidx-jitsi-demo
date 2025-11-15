@@ -50,6 +50,7 @@
 
     <!-- Recuadro central Jitsi + overlay accesible encima -->
     <div id="meet" class="meet">
+      <!-- Canvas transparente solo para los puntos -->
       <div id="accessibility-overlay" class="access-overlay">
         <video id="accessibleVideo" autoplay playsinline muted></video>
         <canvas id="overlayCanvas"></canvas>
@@ -178,16 +179,20 @@
           throw new Error("Este navegador no soporta getUserMedia");
         }
 
-        // Pedimos acceso a la cámara (se comparte con Jitsi)
+        // Pedimos acceso a la cámara (se puede compartir con Jitsi)
         accessStream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480 }
         });
         accessVideo.srcObject = accessStream;
 
-        accessVideo.onloadedmetadata = () => {
-          overlayCanvas.width = accessVideo.videoWidth || 480;
-          overlayCanvas.height = accessVideo.videoHeight || 360;
+        // Ajustamos el canvas al tamaño del recuadro de Jitsi
+        const meetElem = document.getElementById("meet");
+        const resizeCanvasToMeet = () => {
+          overlayCanvas.width = meetElem.clientWidth;
+          overlayCanvas.height = meetElem.clientHeight;
         };
+        resizeCanvasToMeet();
+        window.addEventListener("resize", resizeCanvasToMeet);
 
         initHolistic(accessVideo, overlayCanvas, overlayCtx);
 
@@ -244,14 +249,9 @@
         holistic.onResults((results) => {
           ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 
-          // Dibujar el frame original
-          if (results.image) {
-            ctx.save();
-            ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
-            ctx.restore();
-          }
-
-          // Opciones para que los puntos NO sean negros: verde flúor, radio chico
+          // IMPORTANTE:
+          // Ya NO dibujamos la imagen, solo los puntos,
+          // así se ve el video de Jitsi de fondo.
           const landmarkStyle = {
             color: '#00ff00',
             radius: 2
@@ -266,7 +266,7 @@
           if (results.rightHandLandmarks) {
             drawingUtils.drawLandmarks(ctx, results.rightHandLandmarks, landmarkStyle);
           }
-          // Cara la dejaste desactivada, así queda limpio
+          // Cara la mantenemos desactivada si querés menos ruido.
         });
       }
 
