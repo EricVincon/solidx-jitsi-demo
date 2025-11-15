@@ -9,12 +9,12 @@
   <!-- Jitsi -->
   <script src="https://8x8.vc/external_api.js"></script>
 
-  <!-- MediaPipe Holistic + utilidades -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <!-- MediaPipe: usar los nombres globales correctos (mpHolistic, drawingUtils, Camera) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5/holistic.js" crossorigin="anonymous"></script>
 
-  <!-- Opcional: algo de estilo mínimo para el panel accesible si tu CSS no lo tiene -->
+  <!-- Estilos mínimos para el panel accesible (por si tu CSS no lo cubre) -->
   <style>
     .access-panel {
       margin-top: 16px;
@@ -110,7 +110,7 @@
     const overlayCtx = overlayCanvas.getContext("2d");
 
     let accessStream = null;      // MediaStream de la cámara
-    let holistic = null;          // Instancia de MediaPipe Holistic
+    let holistic = null;          // Instancia de mpHolistic.Holistic
     let camera = null;            // Instancia de Camera (camera_utils)
     let accessibilityEnabled = false;
 
@@ -254,11 +254,11 @@
     }
 
     function initHolistic(videoEl, canvasEl, ctx) {
-      // Creamos Holistic una sola vez
+      // Creamos Holistic una sola vez, usando el nombre global correcto: mpHolistic
       if (!holistic) {
-        holistic = new Holistic.Holistic({
+        holistic = new mpHolistic.Holistic({
           locateFile: (file) =>
-            `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`,
+            `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5/${file}`,
         });
 
         holistic.setOptions({
@@ -269,8 +269,6 @@
           minDetectionConfidence: 0.5,
           minTrackingConfidence: 0.5,
         });
-
-        const { drawLandmarks } = window; // de drawing_utils
 
         holistic.onResults((results) => {
           // Limpiar
@@ -283,25 +281,24 @@
             ctx.restore();
           }
 
-          // Dibujar SOLO puntos (landmarks)
+          // Dibujar SOLO puntos (landmarks) usando drawingUtils global
           if (results.poseLandmarks) {
-            drawLandmarks(ctx, results.poseLandmarks);
+            drawingUtils.drawLandmarks(ctx, results.poseLandmarks);
           }
           if (results.leftHandLandmarks) {
-            drawLandmarks(ctx, results.leftHandLandmarks);
+            drawingUtils.drawLandmarks(ctx, results.leftHandLandmarks);
           }
           if (results.rightHandLandmarks) {
-            drawLandmarks(ctx, results.rightHandLandmarks);
+            drawingUtils.drawLandmarks(ctx, results.rightHandLandmarks);
           }
           if (results.faceLandmarks) {
-            drawLandmarks(ctx, results.faceLandmarks);
+            drawingUtils.drawLandmarks(ctx, results.faceLandmarks);
           }
         });
       }
 
-      // Siempre (re)creamos la cámara cuando se inicia accesibilidad
-      // Camera viene de camera_utils.js y queda global
-      camera = new Camera(accessVideo, {
+      // Camera viene de camera_utils.js y queda global como "Camera"
+      camera = new Camera(videoEl, {
         onFrame: async () => {
           await holistic.send({ image: videoEl });
         },
