@@ -18,15 +18,12 @@
   <style>
     .meet-wrapper {
       position: relative;
-      width: 100%;
-      height: 100%;
+      width: 80%;
+      height: 80%;
     }
 
     /* El .meet ya lo manejás en style.css, esto es por las dudas */
-    .meet {
-      width: 100%;
-      height: 100%;
-    }
+    
 
     .access-overlay {
       position: absolute;
@@ -38,8 +35,8 @@
 
     .access-overlay video,
     .access-overlay canvas {
-      width: 100%;
-      height: 100%;
+      width: 80%;
+      height: 80%;
       object-fit: cover;
       display: block;
     }
@@ -242,8 +239,8 @@
         accessVideo.srcObject = accessStream;
 
         accessVideo.onloadedmetadata = () => {
-          overlayCanvas.width = accessVideo.videoWidth || 640;
-          overlayCanvas.height = accessVideo.videoHeight || 480;
+          overlayCanvas.width = accessVideo.videoWidth || 480;
+          overlayCanvas.height = accessVideo.videoHeight || 360;
         };
 
         initHolistic(accessVideo, overlayCanvas, overlayCtx);
@@ -323,9 +320,8 @@
           if (results.rightHandLandmarks) {
             drawingUtils.drawLandmarks(ctx, results.rightHandLandmarks, landmarkStyle);
           }
-          if (results.faceLandmarks) {
-            drawingUtils.drawLandmarks(ctx, results.faceLandmarks, landmarkStyle);
-          }
+          
+          
         });
       }
 
