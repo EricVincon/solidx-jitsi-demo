@@ -5,12 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SOLIDX - Videollamada</title>
   <link rel="stylesheet" href="style.css" />
+
+  <!-- Jitsi -->
   <script src="https://8x8.vc/external_api.js"></script>
 
-  <!-- NUEVO: MediaPipe Holistic + utilidades -->
+  <!-- MediaPipe Holistic + utilidades -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+  <!-- Opcional: algo de estilo mínimo para el panel accesible si tu CSS no lo tiene -->
+  <style>
+    .access-panel {
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .access-video-wrapper {
+      position: relative;
+      max-width: 480px;
+    }
+    .access-video-wrapper video,
+    .access-video-wrapper canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .access-video-wrapper canvas {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+    }
+    .access-note {
+      font-size: 0.85rem;
+      color: #555;
+      margin-top: 8px;
+    }
+  </style>
 </head>
 <body>
   <header>
@@ -48,7 +82,7 @@
 
     <div id="meet" class="meet"></div>
 
-    <!-- NUEVO: panel de accesibilidad para mostrar puntos de MediaPipe -->
+    <!-- Panel accesible con cámara propia + puntos de MediaPipe -->
     <section id="accessibility-panel" class="access-panel" style="display:none;">
       <h2>Vista accesible (puntos clave)</h2>
       <div class="access-video-wrapper">
@@ -69,15 +103,15 @@
     const APP_ID = "vpaas-magic-cookie-47b629c2cf8a4db3a9373961402974c0";
     const domain = "8x8.vc";
 
-    // NUEVO: refs para accesibilidad
+    // Referencias para la vista accesible
     const accessPanel = document.getElementById("accessibility-panel");
     const accessVideo = document.getElementById("accessibleVideo");
     const overlayCanvas = document.getElementById("overlayCanvas");
     const overlayCtx = overlayCanvas.getContext("2d");
 
-    let accessStream = null;
-    let holistic = null;
-    let camera = null;
+    let accessStream = null;      // MediaStream de la cámara
+    let holistic = null;          // Instancia de MediaPipe Holistic
+    let camera = null;            // Instancia de Camera (camera_utils)
     let accessibilityEnabled = false;
 
     // Lee ?room= de la URL y autocompleta
@@ -87,6 +121,7 @@
       document.getElementById("sala").value = roomFromUrl;
     }
 
+    // Botón Invitar
     document.getElementById("btnInvitar").addEventListener("click", async () => {
       const salaInput = document.getElementById("sala").value.trim() || "demo";
       const origin = window.location.origin;
@@ -102,6 +137,7 @@
       }
     });
 
+    // Botón Entrar
     document.getElementById("btnEntrar").addEventListener("click", async () => {
       const nombre = document.getElementById("nombre").value.trim() || "Invitado";
       const salaInput = document.getElementById("sala").value.trim() || "demo";
@@ -140,12 +176,12 @@
         const api = new JitsiMeetExternalAPI(domain, options);
         api.executeCommand("subject", "Videollamada SOLIDX");
 
-        // NUEVO: si el usuario marcó "No oyente", activamos el panel accesible
+        // Si el usuario marcó "No oyente", activamos la vista accesible
         if (traductorInicialActivo) {
           startAccessibility();
         }
 
-        // NUEVO: cuando la sala se cierra, apagamos cámara y MediaPipe
+        // Cuando la sala se cierra, apagamos cámara y MediaPipe
         api.addListener("readyToClose", () => {
           stopAccessibility();
         });
@@ -167,19 +203,29 @@
       accessPanel.style.display = "block";
 
       try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Este navegador no soporta getUserMedia");
+        }
+
         // Pedimos acceso a la cámara
-        accessStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        accessStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480 }
+        });
         accessVideo.srcObject = accessStream;
 
         accessVideo.onloadedmetadata = () => {
-          overlayCanvas.width = accessVideo.videoWidth;
-          overlayCanvas.height = accessVideo.videoHeight;
+          overlayCanvas.width = accessVideo.videoWidth || 640;
+          overlayCanvas.height = accessVideo.videoHeight || 480;
         };
 
         initHolistic(accessVideo, overlayCanvas, overlayCtx);
+
       } catch (e) {
-        console.error("Error al iniciar accesibilidad:", e);
-        alert("No se pudo acceder a la cámara para la vista accesible.");
+        console.error("Error al iniciar accesibilidad:", e.name, e.message);
+        alert(
+          "No se pudo acceder a la cámara para la vista accesible.\n\n" +
+          "Detalle técnico: " + e.name + (e.message ? " - " + e.message : "")
+        );
         accessibilityEnabled = false;
         accessPanel.style.display = "none";
       }
@@ -197,7 +243,7 @@
         accessStream = null;
       }
 
-      // Detener cámara virtual de MediaPipe
+      // Detener cámara de MediaPipe
       if (camera) {
         camera.stop();
         camera = null;
@@ -208,61 +254,54 @@
     }
 
     function initHolistic(videoEl, canvasEl, ctx) {
-      // Evita re-inicializar
-      if (holistic) {
-        // Reinicia la cámara asociada
-        camera = new Camera.Camera(videoEl, {
-          onFrame: async () => {
-            await holistic.send({ image: videoEl });
-          },
-          width: 640,
-          height: 480,
+      // Creamos Holistic una sola vez
+      if (!holistic) {
+        holistic = new Holistic.Holistic({
+          locateFile: (file) =>
+            `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`,
         });
-        camera.start();
-        return;
+
+        holistic.setOptions({
+          modelComplexity: 1,
+          smoothLandmarks: true,
+          enableSegmentation: false,
+          refineFaceLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5,
+        });
+
+        const { drawLandmarks } = window; // de drawing_utils
+
+        holistic.onResults((results) => {
+          // Limpiar
+          ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+          // Dibujar el frame original (opcional)
+          if (results.image) {
+            ctx.save();
+            ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
+            ctx.restore();
+          }
+
+          // Dibujar SOLO puntos (landmarks)
+          if (results.poseLandmarks) {
+            drawLandmarks(ctx, results.poseLandmarks);
+          }
+          if (results.leftHandLandmarks) {
+            drawLandmarks(ctx, results.leftHandLandmarks);
+          }
+          if (results.rightHandLandmarks) {
+            drawLandmarks(ctx, results.rightHandLandmarks);
+          }
+          if (results.faceLandmarks) {
+            drawLandmarks(ctx, results.faceLandmarks);
+          }
+        });
       }
 
-      holistic = new Holistic.Holistic({
-        locateFile: (file) =>
-          `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`,
-      });
-
-      holistic.setOptions({
-        modelComplexity: 1,
-        smoothLandmarks: true,
-        enableSegmentation: false,
-        refineFaceLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
-
-      const { drawLandmarks } = window; // de drawing_utils
-
-      holistic.onResults((results) => {
-        // Limpiar
-        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-
-        // Dibujar el frame original opcionalmente
-        ctx.save();
-        ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
-        ctx.restore();
-
-        // Solo puntos (landmarks), sin conexiones
-        if (results.poseLandmarks) {
-          drawLandmarks(ctx, results.poseLandmarks);
-        }
-        if (results.leftHandLandmarks) {
-          drawLandmarks(ctx, results.leftHandLandmarks);
-        }
-        if (results.rightHandLandmarks) {
-          drawLandmarks(ctx, results.rightHandLandmarks);
-        }
-        if (results.faceLandmarks) {
-          drawLandmarks(ctx, results.faceLandmarks);
-        }
-      });
-
-      camera = new Camera.Camera(videoEl, {
+      // Siempre (re)creamos la cámara cuando se inicia accesibilidad
+      // Camera viene de camera_utils.js y queda global
+      camera = new Camera(accessVideo, {
         onFrame: async () => {
           await holistic.send({ image: videoEl });
         },
