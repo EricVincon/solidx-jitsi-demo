@@ -48,11 +48,12 @@
       </div>
     </div>
 
-    <!-- Recuadro central Jitsi + overlay accesible encima -->
+    <!-- Recuadro central de Jitsi, con overlay de keypoints encima -->
     <div id="meet" class="meet">
-      <!-- Canvas transparente solo para los puntos -->
       <div id="accessibility-overlay" class="access-overlay">
+        <!-- Video oculto: solo fuente para MediaPipe -->
         <video id="accessibleVideo" autoplay playsinline muted></video>
+        <!-- Canvas transparente donde dibujamos los puntos -->
         <canvas id="overlayCanvas"></canvas>
         <div class="access-label">Modo accesible activo</div>
       </div>
@@ -122,7 +123,7 @@
           return;
         }
 
-        // Config base para Jitsi: lobby / prejoin como antes
+        // Config base para Jitsi (mantengo fullscreen y toda la toolbar por defecto)
         const configOverwrite = {
           prejoinPageEnabled: true,
           defaultLanguage: "es",
@@ -130,16 +131,19 @@
           constraints: { video: { height: { ideal: 480 }, width: { ideal: 720 } } },
         };
 
+        const interfaceConfigOverwrite = {
+          SHOW_JITSI_WATERMARK: false,
+          SHOW_CHROME_EXTENSION_BANNER: false,
+          DEFAULT_BACKGROUND: "#f0f0f0"
+          // No tocamos TOOLBAR_BUTTONS => Jitsi mantiene fullscreen, chat, etc.
+        };
+
         const options = {
           roomName,
           jwt: data.token,
           parentNode: document.getElementById("meet"),
           configOverwrite,
-          interfaceConfigOverwrite: {
-            SHOW_JITSI_WATERMARK: false,
-            SHOW_CHROME_EXTENSION_BANNER: false,
-            DEFAULT_BACKGROUND: "#f0f0f0"
-          },
+          interfaceConfigOverwrite,
           userInfo: { displayName: nombre }
         };
 
@@ -229,6 +233,15 @@
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     }
 
+    // Espeja landmarks en X para que coincidan con la vista espejada de Jitsi
+    function mirrorLandmarks(landmarks) {
+      if (!landmarks) return null;
+      return landmarks.map(l => ({
+        ...l,
+        x: 1 - l.x   // coord normalizada [0,1] → espejo horizontal
+      }));
+    }
+
     function initHolistic(videoEl, canvasEl, ctx) {
       // Creamos Holistic una sola vez
       if (!holistic) {
@@ -249,24 +262,29 @@
         holistic.onResults((results) => {
           ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 
-          // IMPORTANTE:
-          // Ya NO dibujamos la imagen, solo los puntos,
-          // así se ve el video de Jitsi de fondo.
+          // Solo puntos, sin dibujar la imagen → se ve el video de Jitsi de fondo
           const landmarkStyle = {
             color: '#00ff00',
             radius: 2
           };
 
-          if (results.poseLandmarks) {
-            drawingUtils.drawLandmarks(ctx, results.poseLandmarks, landmarkStyle);
+          // Espejamos para que mano derecha se vea como derecha en la vista de Jitsi
+          const poseLms      = mirrorLandmarks(results.poseLandmarks);
+          const leftHandLms  = mirrorLandmarks(results.leftHandLandmarks);
+          const rightHandLms = mirrorLandmarks(results.rightHandLandmarks);
+          // Si quisieras cara: const faceLms = mirrorLandmarks(results.faceLandmarks);
+
+          if (poseLms) {
+            drawingUtils.drawLandmarks(ctx, poseLms, landmarkStyle);
           }
-          if (results.leftHandLandmarks) {
-            drawingUtils.drawLandmarks(ctx, results.leftHandLandmarks, landmarkStyle);
+          if (leftHandLms) {
+            drawingUtils.drawLandmarks(ctx, leftHandLms, landmarkStyle);
           }
-          if (results.rightHandLandmarks) {
-            drawingUtils.drawLandmarks(ctx, results.rightHandLandmarks, landmarkStyle);
+          if (rightHandLms) {
+            drawingUtils.drawLandmarks(ctx, rightHandLms, landmarkStyle);
           }
-          // Cara la mantenemos desactivada si querés menos ruido.
+          // Cara desactivada por ahora
+          // if (faceLms) { drawingUtils.drawLandmarks(ctx, faceLms, landmarkStyle); }
         });
       }
 
